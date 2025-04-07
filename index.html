@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini Battleground Game</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
+    canvas { display: block; margin: 0 auto; background: #333; }
+    #overlay, #gameOver, #restartBtn, #startMenu {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+    }
+    #gameOver {
+      top: 30%;
+      font-size: 2.5rem;
+      color: white;
+      display: none;
+    }
+    #restartBtn, #startBtn {
+      top: 55%;
+      padding: 10px 20px;
+      font-size: 1.2rem;
+      background: #444;
+      color: white;
+      border: none;
+      cursor: pointer;
+      border-radius: 8px;
+      display: none;
+    }
+    #startMenu {
+      top: 30%;
+      color: white;
+      display: block;
+    }
+    #scoreboard {
+      position: absolute;
+      top: 10px;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+<div id="scoreboard">Blue Wins: 0 | Red Wins: 0</div>
+<canvas id="gameCanvas" width="800" height="400"></canvas>
+<div id="gameOver"></div>
+<button id="restartBtn">Next Round</button>
+<div id="startMenu">
+  <h1>Mini Battleground</h1>
+  <p>Blue: W/S to move, D to shoot<br>Red: ↑/↓ to move, ← to shoot</p>
+  <button id="startBtn">Start Game</button>
+</div>
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const gameOverText = document.getElementById('gameOver');
+  const restartBtn = document.getElementById('restartBtn');
+  const startMenu = document.getElementById('startMenu');
+  const startBtn = document.getElementById('startBtn');
+  const scoreboard = document.getElementById('scoreboard');
+
+  const keys = {};
+  let gameOver = false;
+  let blueWins = 0;
+  let redWins = 0;
+
+  let player1, player2;
+
+  class Player {
+    constructor(x, color, controls) {
+      this.x = x;
+      this.y = 300;
+      this.width = 40;
+      this.height = 40;
+      this.color = color;
+      this.health = 100;
+      this.controls = controls;
+      this.bullets = [];
+    }
+
+    draw() {
+      ctx.fillStyle = 'white';
+      ctx.fillText(`${this.color.toUpperCase()} HP: ${this.health}`, this.x, this.y - 15);
+      ctx.fillStyle = this.color;
+      ctx.fillRect(this.x, this.y, this.width, this.height);
+      this.bullets.forEach(bullet => bullet.draw());
+    }
+
+    shoot() {
+      this.bullets.push(new Bullet(this.x + this.width / 2, this.y, this.color, this === player1 ? 5 : -5));
+      shootSound.currentTime = 0;
+      shootSound.play();
+    }
+
+    update() {
+      this.bullets.forEach((bullet, i) => {
+        bullet.update();
+        if (bullet.x < 0 || bullet.x > canvas.width) {
+          this.bullets.splice(i, 1);
+        }
+      });
+    }
+  }
+
+  class Bullet {
+    constructor(x, y, color, speed) {
+      this.x = x;
+      this.y = y + 10;
+      this.radius = 5;
+      this.color = color;
+      this.speed = speed;
+    }
+
+    draw() {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      ctx.fillStyle = this.color;
+      ctx.fill();
+    }
+
+    update() {
+      this.x += this.speed;
+      this.checkCollision();
+    }
+
+    checkCollision() {
+      const target = this.speed > 0 ? player2 : player1;
+      if (
+        this.x > target.x &&
+        this.x < target.x + target.width &&
+        this.y > target.y &&
+        this.y < target.y + target.height
+      ) {
+        target.health -= 10;
+        hitSound.currentTime = 0;
+        hitSound.play();
+        if (this.speed > 0) player1.bullets.splice(player1.bullets.indexOf(this), 1);
+        else player2.bullets.splice(player2.bullets.indexOf(this), 1);
+      }
+    }
+  }
+
+  const shootSound = new Audio('https://www.soundjay.com/button/beep-07.wav');
+  const hitSound = new Audio('https://www.soundjay.com/button/beep-10.wav');
+
+  function initGame() {
+    player1 = new Player(50, 'blue', { up: 'w', down: 's', shoot: 'd' });
+    player2 = new Player(710, 'red', { up: 'ArrowUp', down: 'ArrowDown', shoot: 'ArrowLeft' });
+    gameOver = false;
+    gameOverText.style.display = 'none';
+    restartBtn.style.display = 'none';
+    requestAnimationFrame(gameLoop);
+  }
+
+  function checkGameOver() {
+    if (player1.health <= 0) {
+      redWins++;
+      gameOver = true;
+      gameOverText.textContent = 'Red Wins This Round!';
+    } else if (player2.health <= 0) {
+      blueWins++;
+      gameOver = true;
+      gameOverText.textContent = 'Blue Wins This Round!';
+    }
+
+    if (gameOver) {
+      gameOverText.style.display = 'block';
+      restartBtn.style.display = 'block';
+      scoreboard.textContent = `Blue Wins: ${blueWins} | Red Wins: ${redWins}`;
+    }
+
+    if (blueWins >= 3 || redWins >= 3) {
+      gameOverText.textContent += `\n${blueWins >= 3 ? 'Blue' : 'Red'} Wins the Match!`;
+      restartBtn.textContent = 'Play Again';
+      blueWins = 0;
+      redWins = 0;
+    }
+  }
+
+  function gameLoop() {
+    if (gameOver) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = '16px Arial';
+
+    if (keys[player1.controls.up]) player1.y -= 4;
+    if (keys[player1.controls.down]) player1.y += 4;
+    if (keys[player2.controls.up]) player2.y -= 4;
+    if (keys[player2.controls.down]) player2.y += 4;
+
+    player1.update();
+    player2.update();
+
+    player1.draw();
+    player2.draw();
+
+    checkGameOver();
+    requestAnimationFrame(gameLoop);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+    if (!gameOver) {
+      if (e.key === player1.controls.shoot) player1.shoot();
+      if (e.key === player2.controls.shoot) player2.shoot();
+    }
+  });
+
+  document.addEventListener('keyup', (e) => {
+    keys[e.key] = false;
+  });
+
+  restartBtn.addEventListener('click', () => {
+    initGame();
+  });
+
+  startBtn.addEventListener('click', () => {
+    startMenu.style.display = 'none';
+    initGame();
+  });
+</script>
+</body>
+</html>
+
+
+---
+
+Once you've pasted that into GitHub and committed it, go to Settings > Pages, select the main branch, and you'll get your public game link!
+
+Let me know when you're done or if you want help customizing the game or uploading more files (like images or sounds).
+
